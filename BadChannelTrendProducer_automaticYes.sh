@@ -97,12 +97,16 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                 cd SiStrip_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ 
                 perl ../../makeIndexForBadChannels.pl -c 2 -t ${dataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                 cd ../..
-            fi
-            if [ $detector == "Pixel" ] && [$runlist  287185]; then
-                echo "./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $dataset"
-                mkdir -p  Pixel_MergedBadChannelsTrends
-                ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $dataset
-                mkdir Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
+            elif [[ $detector == "Pixel" ]]; then
+                    mkdir -p  Pixel_MergedBadChannelsTrends
+                if [[ $runlist < 287185 ]]; then
+                    echo "./Pixel_MergedBadComponentsTrendProducer.py $runlist $dataset"
+                    ./Pixel_MergedBadChannelTrendProducer.py $runlist $dataset
+		else
+	            echo "./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $dataset"
+                    ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $dataset
+                fi
+		mkdir Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
                 #the following line moves all the files in the correct directory, without moving directories themselves
                 cp sorted_runlist.txt Pixel_MergedBadChannelsTrends/runlist.txt
                 mv Pixel_MergedBadChannels*.root Pixel_MergedBadChannelsTrends/.
@@ -110,18 +114,29 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                 cd Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ 
                 perl ../../makeIndexForBadChannels.pl -c 2 -t ${dataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                 cd ../..
-            elif [ $detector == "Pixel" ] && [$runlist -lt 287185]; then
-                echo "./Pixel_MergedBadComponentsTrendProducer.py $runlist $dataset"
-                mkdir -p  Pixel_MergedBadChannelsTrends
-                ./Pixel_MergedBadChannelTrendProducer.py $runlist $dataset
-                mkdir Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
+                echo "./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $dataset"
+                mkdir -p  Pixel_DoubleColumnsTrends
+                ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $dataset
+                mkdir Pixel_DoubleColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
                 #the following line moves all the files in the correct directory, without moving directories themselves
-                cp sorted_runlist.txt Pixel_MergedBadChannelsTrends/runlist.txt
-                mv Pixel_MergedBadChannels*.root Pixel_MergedBadChannelsTrends/.
-                find Pixel_MergedBadChannelsTrends/ -maxdepth 1 -type f -name '[!.]*' -exec mv -n {} Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ \; 
-                cd Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ 
+                cp sorted_runlist.txt Pixel_DoubleColumnsTrends/runlist.txt
+                mv Pixel_DoubleColumns*.root Pixel_DoubleColumnsTrends/.
+                find Pixel_DoubleColumnsTrends/ -maxdepth 1 -type f -name '[!.]*' -exec mv -n {} Pixel_DoubleColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ \; 
+                cd Pixel_DoubleColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ 
                 perl ../../makeIndexForBadChannels.pl -c 2 -t ${dataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                 cd ../..
+                echo "./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $dataset"
+                mkdir -p  Pixel_NoisyColumnsTrends
+                ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $dataset
+                mkdir Pixel_NoisyColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
+                #the following line moves all the files in the correct directory, without moving directories themselves
+                cp sorted_runlist.txt Pixel_NoisyColumnsTrends/runlist.txt
+                mv Pixel_NoisyColumns*.root Pixel_NoisyColumnsTrends/.
+                find Pixel_NoisyColumnsTrends/ -maxdepth 1 -type f -name '[!.]*' -exec mv -n {} Pixel_NoisyColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ \; 
+                cd Pixel_NoisyColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ 
+                perl ../../makeIndexForBadChannels.pl -c 2 -t ${dataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
+                cd ../..
+
             fi
         elif [[ $LOOPMODE == 1 ]]; then
             if [[ $detector == "SiStrip" ]]; then
@@ -158,6 +173,29 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                         perl ../../makeIndexForBadChannels.pl -c 2 -t ${eachDataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                         cd ../..
                     fi
+                    if nohup ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
+                        echo "./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $eachDataset"
+                        ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $eachDataset
+                        mkdir Pixel_DoubleColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}
+                        cp sorted_runlist.txt Pixel_DoubleColumnsTrends/runlist.txt
+                        mv Pixel_DoubleColumns*.root Pixel_DoubleColumnsTrends/.
+                        find Pixel_DoubleColumnsTrends/ -maxdepth 1 -type f -name '[!.]*' -exec mv -n {} Pixel_DoubleColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}/ \; 
+                        cd Pixel_DoubleColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}/ 
+                        perl ../../makeIndexForBadChannels.pl -c 2 -t ${eachDataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
+                        cd ../..
+                    fi
+                    if nohup ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
+                        echo "./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $eachDataset"
+                        ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $eachDataset
+                        mkdir Pixel_NoisyColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}
+                        cp sorted_runlist.txt Pixel_NoisyColumnsTrends/runlist.txt
+                        mv Pixel_NoisyColumns*.root Pixel_NoisyColumnsTrends/.
+                        find Pixel_NoisyColumnsTrends/ -maxdepth 1 -type f -name '[!.]*' -exec mv -n {} Pixel_NoisyColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}/ \; 
+                        cd Pixel_NoisyColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}/ 
+                        perl ../../makeIndexForBadChannels.pl -c 2 -t ${eachDataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
+                        cd ../..
+                    fi
+
                 done
 	    elif [ $detector == "Pixel" && [$runlist -lt 287185]; then
                 mkdir -p  Pixel_MergedBadChannelsTrends
@@ -187,8 +225,15 @@ if [[ $step > 0.999 && $step < 2 ]]; then
         fi
         if [[ $detector == "Pixel" ]]; then
             mkdir -p $DAILYPATH/Pixel
-            cp -r Pixel_MergedBadChannelsTrends/* $DAILYPATH/Pixel/.
+	    mkdir -p $DAILYPATH/Pixel/Dead_ROCS
+	    mkdir -p $DAILYPATH/Pixel/Inefficient_Double_Columns
+	    mkdir -p $DAILYPATH/Pixel/Noisy_Columns
+            cp -r Pixel_MergedBadChannelsTrends/* $DAILYPATH/Pixel/Dead_ROCS/.
+            cp -r Pixel_DoubleColumnsTrends/* $DAILYPATH/Pixel/Inefficient_Double_Columns/.
+            cp -r Pixel_NoisyColumnsTrends/* $DAILYPATH/Pixel/Noisy_Columns/.
             rm -r Pixel_MergedBadChannelsTrends
+	    rm -r Pixel_DoubleColumnsTrends
+	    rm -r Pixel_NoisyColumnsTrends
         fi
         echo "THE FILES ARE STORED IN $DAILYPATH"
         echo "YOU CAN LOOK AT THEM AT : http://vocms061.cern.ch/event_display/tmp/daily_badChannels"

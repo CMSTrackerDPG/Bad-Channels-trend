@@ -48,12 +48,12 @@ trendBPIX=TH1F("BPIX","BPIX",runs,0,runs)
 trendFPIX=TH1F("FPIX","FPIX",runs,0,runs)
 trend=TH1F("Pixel","Pixel",runs,0,runs)
 
-trendBPIXL1.GetYaxis().SetTitle("# of Bad Channels BPIXL1")
-trendBPIXL2.GetYaxis().SetTitle("# of Bad Channels BPIXL2")
-trendBPIXL3.GetYaxis().SetTitle("# of Bad Channels BPIXL3")
-trendBPIX.GetYaxis().SetTitle("% of Bad Channels BPIX")
-trendFPIX.GetYaxis().SetTitle("% of Bad Channels FPIX")
-trend.GetYaxis().SetTitle("% of Bad Channels Pixel")
+trendBPIXL1.GetYaxis().SetTitle("# of Dead ROCs BPIXL1")
+trendBPIXL2.GetYaxis().SetTitle("# of Dead ROCs BPIXL2")
+trendBPIXL3.GetYaxis().SetTitle("# of Dead ROCs BPIXL3")
+trendBPIX.GetYaxis().SetTitle("% of Dead ROCs BPIX")
+trendFPIX.GetYaxis().SetTitle("% of Dead ROCs FPIX")
+trend.GetYaxis().SetTitle("% of Dead ROCs Pixel")
 
 gStyle.SetHistFillColor(4)
 gStyle.SetHistFillStyle(1)
@@ -373,11 +373,11 @@ if totruns == 0:
     sys.exit()
 
 totfract_bpix=100.*float(mean_bpix)/(n_bpix*totruns)
-strleg_bpix="mean BPIX BadChannels= " + str(totfract_bpix)[:4] +"%"
+strleg_bpix="mean BPIX Dead ROCs= " + str(totfract_bpix)[:4] +"%"
 totfract_fpix=100.*float(mean_fpix)/(n_fpix*totruns)
-strleg_fpix="mean FPIX BadChannels= " + str(totfract_fpix)[:4] +"%"
+strleg_fpix="mean FPIX Dead ROCs= " + str(totfract_fpix)[:4] +"%"
 totfract=100.*float(mean)/(n*totruns)
-strleg="mean Pixel BadChannels= " + str(totfract)[:4] +"%"
+strleg="mean Pixel Dead ROCs= " + str(totfract)[:4] +"%"
 
 print strleg_bpix
 print strleg_fpix

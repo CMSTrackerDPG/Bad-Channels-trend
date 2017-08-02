@@ -41,12 +41,12 @@ if YEAR == 2017:
 		file_StreamExpressCosmics.write(RUN_DATA[7:])
 		
 	if DATASETCFG == "all" or DATASETCFG == "ZeroBias" :
-		RUN_DATA = api.data(workspace = 'TRACKER', table = 'runsummary', template = 'csv', columns = ['number'], filter = {"runClassName": "Collisions17", "number": ">= %d AND <= %d" %(int(RUNMINCFG),int(RUNMAXCFG)), "trackerPresent": "true", "tibtidReady": "true", "tobReady": "true","tecmReady": "true", "tecpReady": "true",  "datasets": {"rowClass": "org.cern.cms.dqm.runregistry.user.model.RunDatasetRowGlobal", "filter": {"datasetName": "like %Prompt%", "runCreated" : ">= %s AND <= %s" %(DAYMINCFG, DAYMAXCFG)}}},tag= 'LATEST')
+		RUN_DATA = api.data(workspace = 'TRACKER', table = 'runsummary', template = 'csv', columns = ['number'], filter = {"runClassName": "like %Collisions17%", "number": ">= %d AND <= %d" %(int(RUNMINCFG),int(RUNMAXCFG)), "trackerPresent": "true", "tibtidReady": "true", "tobReady": "true","tecmReady": "true", "tecpReady": "true",  "datasets": {"rowClass": "org.cern.cms.dqm.runregistry.user.model.RunDatasetRowGlobal", "filter": {"datasetName": "like %Prompt%", "runCreated" : ">= %s AND <= %s" %(DAYMINCFG, DAYMAXCFG)}}},tag= 'LATEST')
 		file_ZeroBias = open('runlist_SiStrip_ZeroBias.txt', 'w')
 		file_ZeroBias.write(RUN_DATA[7:])
 
 	if DATASETCFG == "all" or DATASETCFG == "StreamExpress" :
-		RUN_DATA = api.data(workspace = 'TRACKER', table = 'runsummary', template = 'csv', columns = ['number'], filter = {"runClassName": "Collisions17", "number": ">= %d AND <= %d" %(int(RUNMINCFG),int(RUNMAXCFG)), "trackerPresent": "true", "tibtidReady": "true", "tobReady": "true","tecmReady": "true", "tecpReady": "true",  "datasets": {"rowClass": "org.cern.cms.dqm.runregistry.user.model.RunDatasetRowGlobal", "filter": {"datasetName": "like %Express%", "runCreated" : ">= %s AND <= %s" %(DAYMINCFG, DAYMAXCFG)}}},tag= 'LATEST')
+		RUN_DATA = api.data(workspace = 'TRACKER', table = 'runsummary', template = 'csv', columns = ['number'], filter = {"runClassName": "like %Collisions17%", "number": ">= %d AND <= %d" %(int(RUNMINCFG),int(RUNMAXCFG)), "trackerPresent": "true", "tibtidReady": "true", "tobReady": "true","tecmReady": "true", "tecpReady": "true",  "datasets": {"rowClass": "org.cern.cms.dqm.runregistry.user.model.RunDatasetRowGlobal", "filter": {"datasetName": "like %Express%", "runCreated" : ">= %s AND <= %s" %(DAYMINCFG, DAYMAXCFG)}}},tag= 'LATEST')
 		file_StreamExpress = open('runlist_SiStrip_StreamExpress.txt', 'w')
 		file_StreamExpress.write(RUN_DATA[7:])
 elif YEAR == 2016:

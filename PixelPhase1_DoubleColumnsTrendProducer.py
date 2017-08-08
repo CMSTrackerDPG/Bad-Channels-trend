@@ -1,226 +1,190 @@
 #!/usr/bin/python
-from ROOT import TFile, gStyle, TCanvas, TH1F, TLegend
-import re
+from ROOT import TFile, gStyle, gPad, TCanvas, TH1F, TGraph, TLine, TLegend, TLatex
 import sys
 import os.path
+import os
+import time
+import calendar
 import ROOT
+from array import array
 
-def countruns():
-    global runs
-    global runNumbers
-    runlist=open(sys.argv[1],"r")
-    for i in runlist:
-        if i=="": continue
-        runs=runs+1
-        runNumbers.append(i)
-    if runs==0:
+SHOW_LS = True
+
+#Parse input files and get list of runs and their lengths
+def countruns(runfile,runtimesfile,runtype,dataset,year=2017):
+    runNumbers = []
+    binedges = []
+    binsdict = {}
+    #Get list of runs
+    with open(runfile,"r") as f:
+        runNumbers = [int(line) for line in f.readlines() if line != ""]
+
+    #Check if tracker maps exist for all runs
+    removeIndex = []
+    for index, k in enumerate(runNumbers):
+        runshort=str(k)[:3]
+        check_paths = [os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),dataset,'PixZeroOccROCs_run'+str(k).strip(' \n')+'.txt')]
+        if dataset == "ZeroBias1":
+            check_paths.append(os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),'ZeroBias','PixZeroOccROCs_run'+str(k).strip(' \n')+'.txt'))
+            check_paths.append(os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),'PAMinimumBias1','PixZeroOccROCs_run'+str(k).strip(' \n')+'.txt'))
+        if dataset == "StreamExpress":
+            check_paths.append(os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),'StreamExpressPA','PixZeroOccROCs_run'+str(k).strip(' \n')+'.txt'))
+        found_run = False
+        for path in check_paths:
+            if os.path.isfile(path): found_run = True
+        if not found_run:
+            runlist_missingTrackerMap = open('list_missingTrackerMap_Pixel_' + dataset + '.txt','a+')
+            runlist_missingTrackerMap.write(str(k)+'\n')
+            removeIndex.append(index)
+
+    #If tracker maps don't exist, remove runs from list   
+    for remove in reversed(removeIndex):
+        # we remove in the reverse order to avoid changing the position of the item we will remove
+        del runNumbers[remove] #remove this run from the actual list
+    
+    #Make sure there are runs to process
+    if len(runNumbers) == 0:
         print "input file is empty"
         quit()
 
-def SetHRange(h):
+    #Fill array of bin edges based on lengths of runs
+    binedges.append(0)
+    with open(runtimesfile,"r") as f:
+        line = f.readline().strip()
+        runlist = line.lstrip('[').rstrip(']').split('],[')
+        runtimesdict = {}
+        for run in runlist:
+            runnum = run.split(',')[0].strip('"')
+            starttime = run.split(',')[1].strip('"').replace('_',' ')
+            endtime = run.split(',')[2].strip('"').replace('_',' ')
+            runtimesdict[int(runnum)] = [starttime,endtime]
+        for run in runNumbers:
+            if not runtimesdict.has_key(run):
+                print "didn\'t find run %d in run times list!" % run
+                quit()
+            start_epoch = int(calendar.timegm(time.strptime(runtimesdict[run][0], '%Y-%m-%d %H:%M:%S')))
+            end_epoch = int(calendar.timegm(time.strptime(runtimesdict[run][1], '%Y-%m-%d %H:%M:%S')))
+            runlength = end_epoch - start_epoch
+            binedges.append(binedges[-1] + runlength)
+            binsdict[run] = (runtimesdict[run][0], runtimesdict[run][1])
+
+    return runNumbers,binedges,binsdict
+
+#Set histogram range and add title
+def SetHRange(h,dataset,runmin,runmax):
     h.SetTitle("Double Columns "+ dataset + " " +str(runmin).strip(' \n')+"-"+str(runmax).strip(' \n'))
     hmax= h.GetMaximum()
     h.GetYaxis().SetRangeUser(0,hmax*1.2)
 
-runs=0
-runNumbers=[]
-runtype=""
+#Add vertical lines showing boundaries between runs
+def AddRunBoundaries(h,addlabels=False):
+    line = TLine()
+    line.SetLineStyle(3)
+    tl = TLatex()
+    tl.SetTextSize(0.025)
+    tl.SetTextAlign(33)
+    tl.SetTextAngle(90)
+    tl2 = TLatex()
+    tl2.SetTextSize(0.025)
+    tl2.SetTextAlign(31)
+    tl2.SetTextAngle(90)
+    axislength = h.GetXaxis().GetBinUpEdge(h.GetNbinsX()) - h.GetXaxis().GetBinLowEdge(1)
+    for ibin in range(1,h.GetNbinsX()+1):
+        if ibin>1:
+            ymax = h.GetMaximum() if h.GetMaximum() > 0 else gPad.GetUymax()
+            line.DrawLine(h.GetXaxis().GetBinLowEdge(ibin),0,h.GetXaxis().GetBinLowEdge(ibin),ymax)
+        if addlabels:
+            tl.DrawLatex(h.GetXaxis().GetBinLowEdge(ibin)+0.005*axislength,0.01,"#splitline{%s }{  %s }" % (binsdict[runNumbers[ibin-1]][0].split()[0],binsdict[runNumbers[ibin-1]][0].split()[1]))
+            tl2.DrawLatex(h.GetXaxis().GetBinUpEdge(ibin)-0.01*axislength,0.01,"#splitline{%s }{  %s }" % (binsdict[ibin-1][1].split()[0],binsdict[ibin-1][1].split()[1]))
+
+#Format x-axis and suppress some labels if needed to avoid overcrowding
+def FormatAxis(h,nbins,variable=False,maxlabels=60):
+    h.GetXaxis().SetRange(1, nbins)
+    h.GetXaxis().LabelsOption("v")
+    h.GetXaxis().SetTickLength(0.)
+    labelSpacing = round(nbins/float(maxlabels),0)
+    labelCounter = -1
+    totalLength = h.GetXaxis().GetBinUpEdge(nbins) - h.GetXaxis().GetBinLowEdge(1)
+    lastLabel = 0.0
+    for ibin in range(1,nbins+1):
+        labelCounter += 1
+        if variable:
+            if (h.GetXaxis().GetBinCenter(ibin) - lastLabel)/float(totalLength) < 1./float(maxlabels):
+                h.GetXaxis().SetBinLabel(ibin,"")
+            else:
+                lastLabel = h.GetXaxis().GetBinCenter(ibin)
+        else:
+            if nbins > maxlabels and labelCounter%labelSpacing != 0:
+                h.GetXaxis().SetBinLabel(ibin,"")
+
+#Format legend to display summary text
+def FormatLegend(x1,y1,x2,y2,txt,txtsize):
+    leg = TLegend(x1,y1,x2,y2)
+    leg.SetHeader(txt)
+    leg.SetFillStyle(0)
+    leg.SetBorderSize(0)
+    leg.SetTextSize(0)
+    return leg
+
+
+runfile=sys.argv[1]
+runtimesfile=sys.argv[2]
+dataset=str(sys.argv[3])
+
+runtype="Cosmics" if "Cosmics" in dataset else "Beam"
+year=2017
+beamMode=False if "Cosmics" in dataset else True
+
+#Clean the missing tracker maps list
+if os.path.isfile("list_missingTrackerMap_Pixel_"+dataset+".txt") :
+    os.remove("list_missingTrackerMap_Pixel_"+dataset+".txt")
+
 runmax=0
 runmin=0
-removeIndex=[]
 
-n = 29696 # =18944+10752
-n_bpix = 18944 # =(1536+3584+5632+8192)
-n_fpix = 10752 # =(1792*3*2)
+#Get list of run numbers and durations
+runNumbers,binedges,binsdict = countruns(runfile,runtimesfile,runtype,dataset,year)
 
-limit_cluster = 29696*100
-nofClusters=100000000
+totruns= len(runNumbers)
 
-countruns()
-#print runs
+if totruns == 0:
+    print "No runs (or TrackerMaps) found"
+    sys.exit()
 
 ROOT.gROOT.SetBatch(True)
 
-trendBPIXL1=TH1F("BPIX L1","BPIX L1",runs,0,runs)
-trendBPIXL2=TH1F("BPIX L2","BPIX L2",runs,0,runs)
-trendBPIXL3=TH1F("BPIX L3","BPIX L3",runs,0,runs)
-trendBPIXL4=TH1F("BPIX L4","BPIX L4",runs,0,runs)
-trendBPIX=TH1F("BPIX","BPIX",runs,0,runs)
-trendFPIXp1=TH1F("FPIX +1","FPIX +1",runs,0,runs)
-trendFPIXp2=TH1F("FPIX +2","FPIX +2",runs,0,runs)
-trendFPIXp3=TH1F("FPIX +3","FPIX +3",runs,0,runs)
-trendFPIXm1=TH1F("FPIX -1","FPIX -1",runs,0,runs)
-trendFPIXm2=TH1F("FPIX -2","FPIX -2",runs,0,runs)
-trendFPIXm3=TH1F("FPIX -3","FPIX -3",runs,0,runs)
-trendFPIX=TH1F("FPIX","FPIX",runs,0,runs)
-trend=TH1F("Pixel","Pixel",runs,0,runs)
-
-trendBPIXL1.GetYaxis().SetTitle("# of double colums in BPIXL1")
-trendBPIXL2.GetYaxis().SetTitle("# of double colums in BPIXL2")
-trendBPIXL3.GetYaxis().SetTitle("# of double colums in BPIXL3")
-trendBPIXL4.GetYaxis().SetTitle("# of double colums in BPIXL4")
-trendBPIX.GetYaxis().SetTitle("# of double colums in BPIX")
-trendFPIXp1.GetYaxis().SetTitle("# of double colums in FPIX+1")
-trendFPIXp2.GetYaxis().SetTitle("# of double colums in FPIX+2")
-trendFPIXp3.GetYaxis().SetTitle("# of double colums in FPIX+3")
-trendFPIXm1.GetYaxis().SetTitle("# of double colums in FPIX-1")
-trendFPIXm2.GetYaxis().SetTitle("# of double colums in FPIX-2")
-trendFPIXm3.GetYaxis().SetTitle("# of double colums in FPIX-3")
-trendFPIX.GetYaxis().SetTitle("# of double colums in FPIX")
-trend.GetYaxis().SetTitle("# of double colums in Pixel")
-
-gStyle.SetHistFillColor(4)
 gStyle.SetHistFillStyle(1)
+gStyle.SetHistLineWidth(3)
 gStyle.SetOptStat(0)
 
+trend = {}
+trend['BPixL1'] = TH1F("BPIX L1","BPIX L1;;# of double colums in BPIXL1",totruns,array('d',binedges))
+trend['BPixL2'] = TH1F("BPIX L2","BPIX L2;;# of double colums in BPIXL2",totruns,array('d',binedges))
+trend['BPixL3'] = TH1F("BPIX L3","BPIX L3;;# of double colums in BPIXL3",totruns,array('d',binedges))
+trend['BPixL4'] = TH1F("BPIX L4","BPIX L4;;# of double colums in BPIXL4",totruns,array('d',binedges))
+trend['BPix'] = TH1F("BPIX","BPIX;;# of double colums in BPIX",totruns,array('d',binedges))
+trend['FPixp1'] = TH1F("FPIX +1","FPIX +1;;# of double colums in FPIX+1",totruns,array('d',binedges))
+trend['FPixp2'] = TH1F("FPIX +2","FPIX +2;;# of double colums in FPIX+2",totruns,array('d',binedges))
+trend['FPixp3'] = TH1F("FPIX +3","FPIX +3;;# of double colums in FPIX+3",totruns,array('d',binedges))
+trend['FPixm1'] = TH1F("FPIX -1","FPIX -1;;# of double colums in FPIX-1",totruns,array('d',binedges))
+trend['FPixm2'] = TH1F("FPIX -2","FPIX -2;;# of double colums in FPIX-2",totruns,array('d',binedges))
+trend['FPixm3'] = TH1F("FPIX -3","FPIX -3;;# of double colums in FPIX-3",totruns,array('d',binedges))
+trend['FPix'] = TH1F("FPIX","FPIX;;# of double colums in FPIX",totruns,array('d',binedges))
+trend['Pixel'] = TH1F("Pixel","Pixel;;# of double colums in Pixel",totruns,array('d',binedges))
 
 bin=0
-
-totruns= len(runNumbers)
-print totruns
-dataset=str(sys.argv[2])
-
-print dataset
-
-#Clean the missing tracker maps list
-if os.path.isfile("list_Pixel_missingTrackerMap_StreamExpressCosmics.txt") and dataset == "StreamExpressCosmics": os.remove("list_Pixel_missingTrackerMap_StreamExpressCosmics.txt")
-if os.path.isfile("list_Pixel missingTrackerMap_Cosmics.txt") and dataset == "Cosmics": os.remove("list_Pixel_missingTrackerMap_Cosmics.txt")
-if os.path.isfile("list_Pixel missingTrackerMap_StreamExpress.txt") and dataset == "StreamExpress": os.remove("list_Pixel_missingTrackerMap_StreamExpress.txt")
-if os.path.isfile("list_Pixel_missingTrackerMap_ZeroBias1.txt") and dataset == "ZeroBias1": os.remove("list_Pixel_missingTrackerMap_ZeroBias1.txt")
-
-#if (dataset.find("Cosmics")>0):
-# runtype="Cosmics"
-#else:
-# runtype="Beam"
-#runtype="Cosmics"
-
-
-
-if "Cosmics" in dataset:
-    runtype="Cosmics"
-    beamMode=False
-else:
-    runtype="Beam"
-    beamMode=True
 
 mean=0
 mean_bpix=0
 mean_fpix=0
 
-notEnoughClusters=0
-
-def fillHistos(filename):
-    global notEnoughClusters
-    global limit_cluster
-    global bin
-    global mean_bpix
-    global mean_fpix
-    global mean
-    nofClusters=0
-    tot=0
-    bpixl1=0
-    bpixl2=0
-    bpixl3=0
-    bpixl4=0
-    bpix=0
-    fpixp1=0
-    fpixp2=0
-    fpixp3=0
-    fpixm1=0
-    fpixm2=0
-    fpixm3=0
-    fpix=0
-    # Read double columns numbers from inputfile
-    #for line in filename: 
-    #    if "Number of clusters=" in line:
-    #        nofClusters =(line.split()[3])
-    #if float(nofClusters) < limit_cluster:
-    #    notEnoughClusters = notEnoughClusters + 1
-    #    return None #equivalent to a continue in the loop
-    bin=bin+1
-    #since we loop again on the file, we need to move to position 0 first
-    #filename.seek(0)
-    position_counter =0
-    for line in filename:
-        if "TOTAL IN LAYER" in line:
-#                bpixl4=re.findall('([0-9]+)$', line)	    
-            if position_counter == 0:
-                 bpixl4=(line.split()[3])
-            elif position_counter == 1:
-                 fpixp1=(line.split()[3])
-            elif position_counter == 2:
-                 fpixp2=(line.split()[3])
-            elif position_counter == 3:
-                 fpixp3=(line.split()[3])
-            elif position_counter == 4:
-                 bpixl1=(line.split()[3])
-            elif position_counter == 5:
-                 bpixl2=(line.split()[3])
-            elif position_counter == 6:
-                 bpixl3=(line.split()[3])
-            elif position_counter == 7:
-                 fpixm2=(line.split()[3])
-            elif position_counter == 8:
-                 fpixm3=(line.split()[3])
-            elif position_counter == 9:
-                 fpixm1=(line.split()[3])
-                 bpix=float(bpixl1)+float(bpixl2)+float(bpixl3)+float(bpixl4)
-		 mean_bpix += float(bpix)
-		 fpix=float(fpixp1)+float(fpixp2)+float(fpixp3)+float(fpixm1)+float(fpixm2)+float(fpixm3)
-		 mean_fpix += float(fpix)
-		 tot=float(bpix)+float(fpix)
-		 mean += float(tot)
-            position_counter = position_counter + 1
-    
-
-    #print line
-    # Setting bincontent of the histograms    
-    trendBPIXL1.SetBinContent(bin,float(bpixl1));
-    trendBPIXL1.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendBPIXL2.SetBinContent(bin,float(bpixl2));
-    trendBPIXL2.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendBPIXL3.SetBinContent(bin,float(bpixl3));
-    trendBPIXL3.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendBPIXL4.SetBinContent(bin,float(bpixl4));
-    trendBPIXL4.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendBPIX.SetBinContent(bin,float(bpix));
-    trendBPIX.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendFPIXp1.SetBinContent(bin,float(fpixp1));
-    trendFPIXp1.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendFPIXp2.SetBinContent(bin,float(fpixp2));
-    trendFPIXp2.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendFPIXp3.SetBinContent(bin,float(fpixp3));
-    trendFPIXp3.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendFPIXm1.SetBinContent(bin,float(fpixm1));
-    trendFPIXm1.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendFPIXm2.SetBinContent(bin,float(fpixm2));
-    trendFPIXm2.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendFPIXm3.SetBinContent(bin,float(fpixm3));
-    trendFPIXm3.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trendFPIX.SetBinContent(bin,float(fpix));
-    trendFPIX.GetXaxis().SetBinLabel(bin,str(k))
-    #
-    trend.SetBinContent(bin,float(tot));
-    trend.GetXaxis().SetBinLabel(bin,str(k))
-
-    return bin
+tot_time=0
+mean_vs_time=0
+mean_bpix_vs_time=0
+mean_fpix_vs_time=0
 
 
-
-
-
-
+#Loop over runs
 for index, k in enumerate(runNumbers):
     if beamMode:
         if  float(k) <= 280385 : runtype="BeamReReco23Sep"
@@ -228,39 +192,66 @@ for index, k in enumerate(runNumbers):
 
     runshort=str(k)[:3]
 
-    #print "/data/users/event_display/Data2017/" + runtype + "/" + runshort + "/"+str(k).strip(' \n')+"/" + dataset + "/PixZeroOccROCs_run"+str(k).strip(' \n')+".txt"
-    # if (os.path.isfile("/data/users/event_display/Data2016/" + runtype + "/" + runshort + "/"+str(k).strip(' \n')+"/" + dataset + "/PixZeroOccROCs_run"+str(k).strip(' \n')+".txt")):
-    if (os.path.isfile("/data/users/event_display/Data2017/" + runtype + "/" + runshort + "/"+str(k).strip(' \n')+"/" + dataset + "/inefficientDPixelColumns.txt")):
-        file_in=open("/data/users/event_display/Data2017/" + runtype + "/" + runshort + "/"+str(k).strip(' \n')+"/" + dataset + "/inefficientDPixelColumns.txt","r");
-        fillHistos(file_in)
-    
-    elif dataset == "ZeroBias1" and os.path.isfile("/data/users/event_display/Data2017/"+runtype+"/"+runshort+"/"+str(k).strip(' \n')+"/ZeroBias/inefficientDPixelColumns.txt"):
-        file_in=open("/data/users/event_display/Data2017/" + runtype + "/" + runshort + "/"+str(k).strip(' \n')+"/ZeroBias/inefficientDPixelColumns.txt","r");
-        fillHistos(file_in)
-    
-    elif dataset == "ZeroBias1" and os.path.isfile("/data/users/event_display/Data2017/"+runtype+"/"+runshort+"/"+str(k).strip(' \n')+"/PAMinimumBias1/inefficientDPixelColumns.txt"):
-        file_in=open("/data/users/event_display/Data2017/" + runtype + "/" + runshort + "/"+str(k).strip(' \n')+"/PAMinimumBias1/inefficientDPixelColumns.txt","r");
-        fillHistos(file_in)
-    
-    elif dataset == "StreamExpress" and os.path.isfile("/data/users/event_display/Data2017/"+runtype+"/"+runshort+"/"+str(k).strip(' \n')+"/StreamExpressPA/inefficientDPixelColumns.txt"):
-        file_in=open("/data/users/event_display/Data2017/" + runtype + "/" + runshort + "/"+str(k).strip(' \n')+"/StreamExpressPA/inefficientDPixelColumns.txt","r");
-        fillHistos(file_in)
-    
-    else:
+    #Find correct tracker map file
+    file_path = ''
+    check_paths = [os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),dataset,'inefficientDPixelColumns.txt')]
+    if dataset == "ZeroBias1":
+        check_paths.append(os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),'ZeroBias','inefficientDPixelColumns.txt'))
+        check_paths.append(os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),'PAMinimumBias1','inefficientDPixelColumns.txt'))
+    if dataset == "StreamExpress":
+        check_paths.append(os.path.join('/data/users/event_display/Data'+str(year),runtype,runshort,str(k).strip(' \n'),'StreamExpressPA','inefficientDPixelColumns.txt'))
+    for path in check_paths:
+        if os.path.isfile(path):
+            file_path = path
+            break
+    if file_path == '':
+        'Print didn\'t find tracker maps for run number ',str(k),'\!'
+        sys.exit()
 
-        runlist_missingTrackerMap = open('list_missingTrackerMap_Pixel_' + dataset + '.txt','a+')
-        runlist_missingTrackerMap.write(k)
-        removeIndex.append(index)
+    with open(file_path,'r') as file_in:
+        contents = file_in.readlines()
 
-for remove in reversed(removeIndex):
-    # we remove in the reverse order to avoid changing the position of the item we will remove
-    del runNumbers[remove] #remove this run from the actual list and update the totruns
+    bin=bin+1
 
-totruns = totruns - len(removeIndex) - notEnoughClusters
+    totals = [float(line.split()[3]) for line in contents if "TOTAL IN LAYER" in line]
+    #this is the order of the entries in the file
+    trend['BPixL4'].SetBinContent(bin,totals[0])
+    trend['FPixp1'].SetBinContent(bin,totals[1])
+    trend['FPixp2'].SetBinContent(bin,totals[2])
+    trend['FPixp3'].SetBinContent(bin,totals[3])
+    trend['BPixL1'].SetBinContent(bin,totals[4])
+    trend['BPixL2'].SetBinContent(bin,totals[5])
+    trend['BPixL3'].SetBinContent(bin,totals[6])
+    trend['FPixm2'].SetBinContent(bin,totals[7])
+    trend['FPixm3'].SetBinContent(bin,totals[8])
+    trend['FPixm1'].SetBinContent(bin,totals[9])
+    bpix = totals[4] + totals[5] + totals[6] + totals[0]
+    fpix = totals[1] + totals[2] + totals[3] + totals[9] + totals[7] + totals[8]
+    tot = bpix + fpix
+    trend['BPix'].SetBinContent(bin,bpix)
+    trend['FPix'].SetBinContent(bin,fpix)
+    trend['Pixel'].SetBinContent(bin,tot)
+    mean_bpix += bpix
+    mean_bpix_vs_time += bpix*(binedges[bin] - binedges[bin-1])
+    mean_fpix += fpix
+    mean_fpix_vs_time += fpix*(binedges[bin] - binedges[bin-1])
+    mean += tot
+    mean_vs_time += tot*(binedges[bin] - binedges[bin-1])
+    tot_time += (binedges[bin]-binedges[bin-1])
 
-if totruns == 0:
-    print "No runs (or TrackerMaps) found"
-    sys.exit()
+    for hist in trend.values():
+	hist.GetXaxis().SetBinLabel(bin,str(k))
+
+
+runmin=runNumbers[0]
+runmax=runNumbers[totruns-1]
+
+totfract_bpix_time=1.*float(mean_bpix_vs_time)/(tot_time)
+strleg_bpix_time="mean = " + str(totfract_bpix_time)[:4] 
+totfract_fpix_time=1.*float(mean_fpix_vs_time)/(tot_time)
+strleg_fpix_time="mean = " + str(totfract_fpix_time)[:4] 
+totfract_time=1.*float(mean_vs_time)/(tot_time)
+strleg_time="mean = " + str(totfract_time)[:4] 
 
 totfract_bpix=1.*float(mean_bpix)/(totruns)
 strleg_bpix="mean = " + str(totfract_bpix)[:4] 
@@ -269,48 +260,19 @@ strleg_fpix="mean = " + str(totfract_fpix)[:4]
 totfract=1.*float(mean)/(totruns)
 strleg="mean = " + str(totfract)[:4] 
 
-print strleg_bpix
-print strleg_fpix
-print strleg
+print strleg_bpix_time
+print strleg_fpix_time
+print strleg_time
 
 #Mean doesn't mean (haha) a lot for the moment, so let's remove it.
+strleg_bpix_time=""
+strleg_fpix_time=""
+strleg_time=""
 strleg_bpix=""
 strleg_fpix=""
 strleg=""
 
-runmin=runNumbers[0]
-runmax=runNumbers[totruns-1]
-
-trend.GetXaxis().SetRange(1, totruns)
-trendBPIXL1.GetXaxis().SetRange(1, totruns)
-trendBPIXL2.GetXaxis().SetRange(1, totruns)
-trendBPIXL3.GetXaxis().SetRange(1, totruns)
-trendBPIXL4.GetXaxis().SetRange(1, totruns)
-trendBPIX.GetXaxis().SetRange(1, totruns)
-trendFPIXp1.GetXaxis().SetRange(1, totruns)
-trendFPIXp2.GetXaxis().SetRange(1, totruns)
-trendFPIXp3.GetXaxis().SetRange(1, totruns)
-trendFPIXm1.GetXaxis().SetRange(1, totruns)
-trendFPIXm2.GetXaxis().SetRange(1, totruns)
-trendFPIXm3.GetXaxis().SetRange(1, totruns)
-trendFPIX.GetXaxis().SetRange(1, totruns)
-
-
-
-trendBPIXL1.GetXaxis().LabelsOption("v")
-trendBPIXL2.GetXaxis().LabelsOption("v")
-trendBPIXL3.GetXaxis().LabelsOption("v")
-trendBPIXL4.GetXaxis().LabelsOption("v")
-trendBPIX.GetXaxis().LabelsOption("v")
-trendFPIXp1.GetXaxis().LabelsOption("v")
-trendFPIXp2.GetXaxis().LabelsOption("v")
-trendFPIXp3.GetXaxis().LabelsOption("v")
-trendFPIXm1.GetXaxis().LabelsOption("v")
-trendFPIXm2.GetXaxis().LabelsOption("v")
-trendFPIXm3.GetXaxis().LabelsOption("v")
-trendFPIX.GetXaxis().LabelsOption("v")
-trend.GetXaxis().LabelsOption("v")
-
+dataset_str = ""
 if "ZeroBias" in dataset:
     dataset_str="Prompt-Reco Collisions"
 elif "StreamExpressCosmics" in dataset:
@@ -322,210 +284,69 @@ elif "Cosmics" in dataset:
 else:
     dataset_str=dataset
 
+Rleg_time = {}
+Rleg_time['BPix'] = FormatLegend(0.3,0.3,0.9,0.9,txt="#splitline{"+dataset_str+"}{"+strleg_bpix_time+"}",txtsize=0.1)
+Rleg_time['FPix'] = FormatLegend(0.3,0.3,0.9,0.9,txt="#splitline{"+dataset_str+"}{"+strleg_fpix_time+"}",txtsize=0.1)
+Rleg_time['Pixel'] = FormatLegend(0.3,0.3,0.9,0.9,txt="#splitline{"+dataset_str+"}{"+strleg_time+"}",txtsize=0.1)
+
+#Setup x axis
+for subdet in trend.keys():
+    FormatAxis(trend[subdet],totruns,True)
+
+#Calculate unit of time for legend
+totalLength = trend['Pixel'].GetXaxis().GetBinUpEdge(totruns) - trend['Pixel'].GetXaxis().GetBinLowEdge(1)
+leg_time = TLatex()
+leg_time.SetTextSize(0.03)
+time_unit = tot_time/20.
+m,s = divmod(time_unit,60)
+h,m = divmod(m,60)
+d,h = divmod(h,24)
+time_str = ''
+if SHOW_LS:
+    time_str = '%3.0f LS' % (time_unit/23.3)
+elif d > 0:
+    time_str = '%4.1f days' % (time_unit/(3600.*24))
+elif h > 0:
+    time_str = '%d h, %d m, %3.1f s' % (h,m,(time_unit - (3600.*h + 60.*m)))
+elif m > 0:
+    time_str = '%d m, %3.1f s' % (m,(time_unit - (60.*m)))
+else:
+    time_str = '%3.1f seconds' % (time_unit)
 
 
-Rleg_bpix=TLegend(0.30,0.30,0.9,0.9)
-Rleg_bpix.SetHeader("#splitline{"+dataset_str+"}{"+strleg_bpix+"}")
-Rleg_bpix.SetFillStyle(0)
-Rleg_bpix.SetBorderSize(0)
-Rleg_bpix.SetTextSize(0.1)
 
-Rleg_fpix=TLegend(0.30,0.30,0.9,0.9)
-Rleg_fpix.SetHeader("#splitline{"+dataset_str+"}{"+strleg_fpix+"}")
-Rleg_fpix.SetFillStyle(0)
-Rleg_fpix.SetBorderSize(0)
-Rleg_fpix.SetTextSize(0.1)
-
-Rleg=TLegend(0.30,0.30,0.9,0.9)
-Rleg.SetHeader("#splitline{"+dataset_str+"}{"+strleg+"}")
-Rleg.SetFillStyle(0)
-Rleg.SetBorderSize(0)
-Rleg.SetTextSize(0.1)
-
-
-folder="/afs/cern.ch/user/c/cctrack/scratch0/Shifter_scripts/AutomaticBadChannelsTrends"
+folder = os.getcwd()
 
 file = TFile(folder+"/Pixel_DoubleColumns_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".root", "RECREATE")
 
-
-c_Pixel = TCanvas("c_Pixel","c_Pixel",1,1,1800,800)
-c_Pixel.SetGridx(True)
-c_Pixel.SetGridy(True)
-
-
-
-
-#trend.SetFillColor(4)
-SetHRange(trend)
-trend.Draw()
-Rleg.Draw()
-c_Pixel.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsPixel_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_Pixel.Write()
-
-c_BPIX = TCanvas("c_BPIX","c_BPIX",1,1,1800,800)
-c_BPIX.SetGridx(True)
-c_BPIX.SetGridy(True)
-
-
-
-#trendBPIX.SetFillColor(4)
-SetHRange(trendBPIX)
-trendBPIX.Draw()
-Rleg_bpix.Draw()
-c_BPIX.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsBPIX_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_BPIX.Write()
-
-c_FPIX = TCanvas("c_FPIX","c_FPIX",1,1,1800,800)
-c_FPIX.SetGridx(True)
-c_FPIX.SetGridy(True)
-
-
-
-#trendFPIX.SetFillColor(4)
-SetHRange(trendFPIX)
-trendFPIX.Draw()
-Rleg_fpix.Draw()
-c_FPIX.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsFPIX_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_FPIX.Write()
-
-
-
-c_BPIXL1 = TCanvas("c_BPIXL1","c_BPIXL1",1,1,1800,800)
-c_BPIXL1.SetGridx(True)
-c_BPIXL1.SetGridy(True)
-
-
-
-
-#trendBPIXL1.SetFillColor(4)
-SetHRange(trendBPIXL1)
-trendBPIXL1.Draw()
-c_BPIXL1.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsBPIXL1_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_BPIXL1.Write()
-
-
-c_BPIXL2 = TCanvas("c_BPIXL2","c_BPIXL2",1,1,1800,800)
-c_BPIXL2.SetGridx(True)
-c_BPIXL2.SetGridy(True)
-
-
-
-
-#trendBPIXL2.SetFillColor(4)
-SetHRange(trendBPIXL2)
-trendBPIXL2.Draw()
-c_BPIXL2.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsBPIXL2_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_BPIXL2.Write()
-
-
-c_BPIXL3 = TCanvas("c_BPIXL3","c_BPIXL3",1,1,1800,800)
-c_BPIXL3.SetGridx(True)
-c_BPIXL3.SetGridy(True)
-
-
-
-
-#trendBPIXL3.SetFillColor(4)
-SetHRange(trendBPIXL3)
-trendBPIXL3.Draw()
-c_BPIXL3.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsBPIXL3_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_BPIXL3.Write()
-
-
-c_BPIXL4 = TCanvas("c_BPIXL4","c_BPIXL4",1,1,1800,800)
-c_BPIXL4.SetGridx(True)
-c_BPIXL4.SetGridy(True)
-
-
-
-
-#trendBPIXL4.SetFillColor(4)
-SetHRange(trendBPIXL4)
-trendBPIXL4.Draw()
-c_BPIXL4.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsBPIXL4_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_BPIXL4.Write()
-
-
-c_FPIXp1 = TCanvas("c_FPIXp1","c_FPIXp1",1,1,1800,800)
-c_FPIXp1.SetGridx(True)
-c_FPIXp1.SetGridy(True)
-
-
-
-
-#trendFPIXp1.SetFillColor(4)
-SetHRange(trendFPIXp1)
-trendFPIXp1.Draw()
-c_FPIXp1.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsFPIXp1_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_FPIXp1.Write()
-
-
-c_FPIXp2 = TCanvas("c_FPIXp2","c_FPIXp2",1,1,1800,800)
-c_FPIXp2.SetGridx(True)
-c_FPIXp2.SetGridy(True)
-
-
-
-
-#trendFPIXp2.SetFillColor(4)
-SetHRange(trendFPIXp2)
-trendFPIXp2.Draw()
-c_FPIXp2.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsFPIXp2_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_FPIXp2.Write()
-
-c_FPIXp3 = TCanvas("c_FPIXp3","c_FPIXp3",1,1,1800,800)
-c_FPIXp3.SetGridx(True)
-c_FPIXp3.SetGridy(True)
-
-
-
-
-#trendFPIXp3.SetFillColor(4)
-SetHRange(trendFPIXp3)
-trendFPIXp3.Draw()
-c_FPIXp3.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsFPIXp3_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_FPIXp3.Write()
-
-
-c_FPIXm1 = TCanvas("c_FPIXm1","c_FPIXm1",1,1,1800,800)
-c_FPIXm1.SetGridx(True)
-c_FPIXm1.SetGridy(True)
-
-
-
-
-#trendFPIXm1.SetFillColor(4)
-SetHRange(trendFPIXm1)
-trendFPIXm1.Draw()
-c_FPIXm1.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsFPIXm1_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_FPIXm1.Write()
-
-
-c_FPIXm2 = TCanvas("c_FPIXm2","c_FPIXm2",1,1,1800,800)
-c_FPIXm2.SetGridx(True)
-c_FPIXm2.SetGridy(True)
-
-
-
-
-#trendFPIXm2.SetFillColor(4)
-SetHRange(trendFPIXm2)
-trendFPIXm2.Draw()
-c_FPIXm2.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsFPIXm2_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_FPIXm2.Write()
-
-
-c_FPIXm3 = TCanvas("c_FPIXm3","c_FPIXm3",1,1,1800,800)
-c_FPIXm3.SetGridx(True)
-c_FPIXm3.SetGridy(True)
-
-
-
-
-#trendFPIXm3.SetFillColor(4)
-SetHRange(trendFPIXm3)
-trendFPIXm3.Draw()
-c_FPIXm3.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumnsFPIXm3_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
-c_FPIXm3.Write()
-
+#Format and plot trend vs time histograms
+for subdet,hist in trend.iteritems():
+    c = TCanvas("c_"+subdet,"c_"+subdet,1,1,1800,800)
+    c.SetGridy(True)
+    SetHRange(hist,dataset,runmin,runmax)
+    hist.Draw()
+    if Rleg_time.has_key(subdet):
+	Rleg_time[subdet].Draw()
+    AddRunBoundaries(hist)
+    c.Update()
+    ymax = hist.GetMaximum() if hist.GetMaximum() > 0 else gPad.GetUymax()
+    leg_time_bkg = TGraph(5)
+    leg_time_bkg.SetPoint(0,0.15,1.0*ymax)
+    leg_time_bkg.SetPoint(1,0.15,0.9*ymax)
+    leg_time_bkg.SetPoint(2,0.15+5.5*(totalLength/20.0),0.9*ymax)
+    leg_time_bkg.SetPoint(3,0.15+5.5*(totalLength/20.0),1.0*ymax)
+    leg_time_bkg.SetPoint(4,0.15,1.0*ymax)
+    leg_time_bkg.SetFillColor(10)
+    leg_time_bkg.SetFillStyle(1001)
+    leg_time_gr = TGraph(4)
+    leg_time_gr.SetPoint(0,0.15+totalLength/20.0,0.97*ymax)
+    leg_time_gr.SetPoint(1,0.15+totalLength/20.0,0.95*ymax)
+    leg_time_gr.SetPoint(2,0.15+2*(totalLength/20.0),0.95*ymax)
+    leg_time_gr.SetPoint(3,0.15+2*(totalLength/20.0),0.97*ymax)
+    leg_time_bkg.Draw('F')
+    leg_time_gr.Draw('L')
+    leg_time.DrawLatex(0.15 + 2.25*(totalLength/20.0),0.95*ymax,time_str)
+    c.RedrawAxis()
+    c.SaveAs(folder+"/Pixel_DoubleColumnsTrends/Pixel_DoubleColumns"+subdet+"_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
+    c.Write()
 

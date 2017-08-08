@@ -7,7 +7,7 @@
 if [[ $# -eq 0 ]]; then 
     printf "NAME\n\tBadChannelsTrendProducer.sh - Produce daily and weekly merged bad channels trend\n"
     printf "\nSYNOPSIS\n"
-    printf "\n\t%-5s\n" "./BadChannelsTrendProducer.sh [OPTION] runlist_SiStrip/Pixel_.txt [DATASET]"
+    printf "\n\t%-5s\n" "./BadChannelsTrendProducer.sh [OPTION] runlist_SiStrip/Pixel_.txt runtimes_[STARTRUN]_to_[ENDRUN].txt [DATASET]"
     printf "\nOPTIONS\n" 
     printf "\n\t%-5s  %-40s\n"  "1"  "do 1.1 (cleaning shifter folder) and 1.2 (creating BadChannels Trend)" 
     printf "\n\t%-5s  %-40s\n"  "1.1"  "completely clean up the shifter daily folder (http://vocms061.cern.ch/event_display/tmp/daily_badChannels/)" 
@@ -15,8 +15,12 @@ if [[ $# -eq 0 ]]; then
     printf "\n\t%-5s  %-40s\n"  "2"  "copy the daily folder of the shifter in the weekly reports of Bad Channels Trends (Shift Leader only)" 
     printf "\nrunlist.txt\t%-5s (only for step 1.2)\n"
     printf "\n\t%-5s  %-40s\n"  "runlist.txt"  "Update this list with the new runs of the week where the tracker or/and the pixel were ON. If the name contains Pixel it will run on Pixel, if it contains SiStrip it will run on SiStrip" 
+    printf "\nruntimes.txt\t%-5s (only for step 1.2)\n"
+    printf "\n\t%-5s  %-40s\n"  "runtimes.txt"  "List with the start and end times of all runs between the earliest and latest runs in the run list"
     printf "\nDATASET\t%-5s (only for step 1.2)\n"
     printf "\n\t%-5s  %-40s\n"  "Choose between : StreamExpress, ZeroBias, StreamExpressCosmics and Cosmics" 
+    #printf "\nADDTIMELABELS\t%-5s (only for step 1.2)\n"
+    #printf "\n\t%-5s  %-40s\n"  "0 or 1"  "Add labels showing start and end times of runs to trend plots"
     printf "\n\n"
     printf "/!\\ NB: if DATASET is not specified, the script will try ALL datasets /!\\ \n\n"
 fi
@@ -29,7 +33,11 @@ step=$1     #variable that stores the step to run
 runlist=$2  #variable that stores the address of the runlist to use
 #if [[ $runlist == "" ]]; then runlist="runlist.txt"; fi #if no option for the runlist is given, then look in the current directory
 
-dataset=$3  #variable that stores the dataset to use
+runtimes=$3  #variable that stores the address of the file with the start and end times of the runs
+
+dataset=$4  #variable that stores the dataset to use
+
+#addtimelabels=$5  # whether or not to add run start and end time labels
 
 LOOPMODE=0
 if [[ $dataset == "" ]]; then LOOPMODE=1; fi #if no dataset is specified, try them all
@@ -42,6 +50,16 @@ if [[ $runlist == "" && $step == 1.2 && $detector == "" ]];  then
     echo "Please specify a runlist for step 2 (be sure it contains SiStrip or Pixel in the name!)"
     exit 0
 fi
+
+if [[ $runtimes == "" && $step == 1.2 ]];  then
+    echo "Please specify a list with the run times for step 2"
+    exit 0
+fi
+
+#if [[ $addtimelabels == "" && $step == 1.2 ]];  then
+#    echo "Please specify whether or not to add labels showing run start and end times"
+#    exit 0
+#fi
 
 
 #--------------------------------------------------
@@ -86,9 +104,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
         echo $detector
         if [[ $LOOPMODE == 0 ]]; then
             if [[ $detector == "SiStrip" ]]; then
-                echo "./SiStrip_MergedBadComponentsTrendProducer.py $runlist $dataset"
+                echo "./SiStrip_MergedBadChannelTrendProducer.py $runlist $runtimes $dataset"
                 mkdir -p  SiStrip_MergedBadChannelsTrends
-                ./SiStrip_MergedBadChannelTrendProducer.py $runlist $dataset
+                ./SiStrip_MergedBadChannelTrendProducer.py $runlist $runtimes $dataset 
                 mkdir SiStrip_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
                 #the following line moves all the files in the correct directory, without moving directories themselves
                 cp sorted_runlist.txt SiStrip_MergedBadChannelsTrends/runlist.txt
@@ -100,11 +118,11 @@ if [[ $step > 0.999 && $step < 2 ]]; then
             elif [[ $detector == "Pixel" ]]; then
                     mkdir -p  Pixel_MergedBadChannelsTrends
                 if [[ $runlist < 287185 ]]; then
-                    echo "./Pixel_MergedBadComponentsTrendProducer.py $runlist $dataset"
-                    ./Pixel_MergedBadChannelTrendProducer.py $runlist $dataset
+                    echo "./Pixel_MergedBadChannelTrendProducer.py $runlist $runtimes $dataset"
+                    ./Pixel_MergedBadChannelTrendProducer.py $runlist $runtimes $dataset
 		else
-	            echo "./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $dataset"
-                    ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $dataset
+	            echo "./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $runtimes $dataset"
+                    ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $runtimes $dataset
                 fi
 		mkdir Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
                 #the following line moves all the files in the correct directory, without moving directories themselves
@@ -114,9 +132,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                 cd Pixel_MergedBadChannelsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ 
                 perl ../../makeIndexForBadChannels.pl -c 2 -t ${dataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                 cd ../..
-                echo "./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $dataset"
+                echo "./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $runtimes $dataset"
                 mkdir -p  Pixel_DoubleColumnsTrends
-                ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $dataset
+                ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $runtimes $dataset
                 mkdir Pixel_DoubleColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
                 #the following line moves all the files in the correct directory, without moving directories themselves
                 cp sorted_runlist.txt Pixel_DoubleColumnsTrends/runlist.txt
@@ -125,9 +143,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                 cd Pixel_DoubleColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}/ 
                 perl ../../makeIndexForBadChannels.pl -c 2 -t ${dataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                 cd ../..
-                echo "./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $dataset"
+                echo "./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $runtimes $dataset"
                 mkdir -p  Pixel_NoisyColumnsTrends
-                ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $dataset
+                ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $runtimes $dataset
                 mkdir Pixel_NoisyColumnsTrends/${dataset}_from${RUNMIN}_to${RUNMAX}
                 #the following line moves all the files in the correct directory, without moving directories themselves
                 cp sorted_runlist.txt Pixel_NoisyColumnsTrends/runlist.txt
@@ -144,9 +162,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                 echo "FINDING THE RIGHT DATASETS..."
                 for eachDataset in "${DATASETS[@]}"
                 do
-                    if nohup ./SiStrip_MergedBadChannelTrendProducer.py $runlist $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
-                        echo "./SiStrip_MergedBadComponentsTrendProducer.py $runlist $eachDataset"
-                        ./SiStrip_MergedBadChannelTrendProducer.py $runlist $eachDataset
+                    if nohup ./SiStrip_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
+                        echo "./SiStrip_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset"
+                        ./SiStrip_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset
                         mkdir SiStrip_MergedBadChannelsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}
                         cp sorted_runlist.txt SiStrip_MergedBadChannelsTrends/runlist.txt
                         mv SiStrip_MergedBadChannels*.root SiStrip_MergedBadChannelsTrends/.
@@ -162,9 +180,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                 echo "FINDING THE RIGHT DATASETS..."
                 for eachDataset in "${DATASETS[@]}"
                 do
-                    if nohup ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
-                        echo "./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $eachDataset"
-                        ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $eachDataset
+                    if nohup ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
+                        echo "./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset"
+                        ./PixelPhase1_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset
                         mkdir Pixel_MergedBadChannelsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}
                         cp sorted_runlist.txt Pixel_MergedBadChannelsTrends/runlist.txt
                         mv Pixel_MergedBadChannels*.root Pixel_MergedBadChannelsTrends/.
@@ -173,9 +191,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                         perl ../../makeIndexForBadChannels.pl -c 2 -t ${eachDataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                         cd ../..
                     fi
-                    if nohup ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
-                        echo "./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $eachDataset"
-                        ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $eachDataset
+                    if nohup ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $runtimes $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
+                        echo "./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $runtimes $eachDataset"
+                        ./PixelPhase1_DoubleColumnsTrendProducer.py $runlist $runtimes $eachDataset
                         mkdir Pixel_DoubleColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}
                         cp sorted_runlist.txt Pixel_DoubleColumnsTrends/runlist.txt
                         mv Pixel_DoubleColumns*.root Pixel_DoubleColumnsTrends/.
@@ -184,9 +202,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                         perl ../../makeIndexForBadChannels.pl -c 2 -t ${eachDataset}_from${RUNMIN}_to${RUNMAX} #create the index for the html view
                         cd ../..
                     fi
-                    if nohup ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
-                        echo "./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $eachDataset"
-                        ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $eachDataset
+                    if nohup ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $runtimes $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
+                        echo "./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $runtimes $eachDataset"
+                        ./PixelPhase1_NoisyColumnsTrendProducer.py $runlist $runtimes $eachDataset
                         mkdir Pixel_NoisyColumnsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}
                         cp sorted_runlist.txt Pixel_NoisyColumnsTrends/runlist.txt
                         mv Pixel_NoisyColumns*.root Pixel_NoisyColumnsTrends/.
@@ -202,9 +220,9 @@ if [[ $step > 0.999 && $step < 2 ]]; then
                 echo "FINDING THE RIGHT DATASETS..."
                 for eachDataset in "${DATASETS[@]}"
                 do
-                    if nohup ./Pixel_MergedBadChannelTrendProducer.py $runlist $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
-                        echo "./Pixel_MergedBadComponentsTrendProducer.py $runlist $eachDataset"
-                        ./Pixel_MergedBadChannelTrendProducer.py $runlist $eachDataset
+                    if nohup ./Pixel_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset &>/dev/null ; then   #a lot of tricks to avoid having verbose when just testing if this script works
+                        echo "./Pixel_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset"
+                        ./Pixel_MergedBadChannelTrendProducer.py $runlist $runtimes $eachDataset
                         mkdir Pixel_MergedBadChannelsTrends/${eachDataset}_from${RUNMIN}_to${RUNMAX}
                         cp sorted_runlist.txt Pixel_MergedBadChannelsTrends/runlist.txt
                         mv Pixel_MergedBadChannels*.root Pixel_MergedBadChannelsTrends/.

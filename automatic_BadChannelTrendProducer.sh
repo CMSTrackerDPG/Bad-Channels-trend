@@ -13,9 +13,10 @@ if [[ $# -eq 0 ]]; then
     printf "\n\t%-5s  %-40s\n"  "week"  "produce the weekly trend"
     printf "\n\t%-5s  %-40s\n"  "month"  "produce the monthly trend for the month in [OPTIONS] (default: current month)"
     printf "\n\t%-5s  %-40s\n"  "year"  "produce the yearly trend for the year in [OPTIONS] (default: current year)"
-    printf "\nOPTIONS\t%-5s (only for 'month' and 'year' modes)\n"
+    printf "\nOPTIONS\t%-5s \n"
     printf "\n\t%-5s  %-40s\n"  "if in 'month' mode"  "add the number of the month (January = 01; February = 02; etc) to be produced"
     printf "\n\t%-5s  %-40s\n"  "if in 'year' mode"  "add the number of the year (2016...)"
+    #printf "\n\t%-5s  %-40s\n"  "in 'all' or 'week' mode"  "add \"timelabels\" to add labels showing the start and end times of the runs for weekly trend plots"
     printf "\n\t%-5s  %-40s\n"  ""
     printf "\n\n"
 fi
@@ -33,6 +34,13 @@ dayofweek="$(date +'%u')" #1 if Monday, 2 if Tuesday... 7 if Sunday
 detector=$1
 mode=$2
 option=$3
+
+#ADDTIMELABELS=0
+#if [[ $option == *"timelabels"* ]]; then
+#    ADDTIMELABELS=1
+#fi
+
+
 
 MONTHLIST=" 01 02 03 04 05 06 07 08 09 10 11 12 "
 YEARLIST=" 2016 2017 " #FIXME PLEASE UPDATE THIS CHECK LIST TO ALLOW OTHER GENERATION THAN 2016 !! JUST ADD THE WANTED YEAR!! E.G. " 2016 2017 " (the empty spaces are important !!!}
@@ -55,9 +63,11 @@ if [[ $mode == "all" || $mode == "week" ]]; then
     echo "Cleaning old runlists..."
     rm runlist_*.txt    
     rm list_missingTrackerMap_*.txt
+    rm runtimes_*.txt
 
     firstday=$(date -d "-7days" +'%Y-%m-%d') #this is the specific format needed for the run registry
     lastday=$(date +'%Y-%m-%d') 
+    echo "${firstday}   ${lastday}"
     if [[ $detector == "all" || $detector == "SiStrip" ]]; then
         python listRuns16_SiStrip.py --daymin $firstday --daymax $lastday
     fi
@@ -67,7 +77,7 @@ if [[ $mode == "all" || $mode == "week" ]]; then
 
     find -type f -empty -delete #remove empty files
     if ! ls runlist_*.txt 1> /dev/null 2>&1; then
-        echo "No runs in this time period - the weekly directory on vocms061 wil be empty"
+        echo "No runs in this time period - the weekly directory on vocms061 will be empty"
         mkdir -p /data/users/event_display/MergedBadChannels
         mkdir -p /data/users/event_display/MergedBadChannels/$year
         mkdir -p /data/users/event_display/MergedBadChannels/$year/Weekly
@@ -80,25 +90,39 @@ if [[ $mode == "all" || $mode == "week" ]]; then
 
     ls runlist_*.txt > ls.txt
     read -a runlists -d '\n' < ls.txt
-    rm -f ls.txt
+#rm -f ls.txt
     echo "Step 1 done"
     #Daily-2: produce it in the daily report
     sh BadChannelTrendProducer_automaticYes.sh 1.1 #clean the daily reports
     echo "Cleaning done"
+    #run Erik's script to get the list of start and end times of all runs in the lists
+    sort runlist_*.txt > sorted_runlist_all.txt
+    firstRun=$(sed -n '1p' sorted_runlist_all.txt)
+    lastRun=$(sed -e '$!d' sorted_runlist_all.txt)
+    rm sorted_runlist_all.txt
+    echo "first run = $firstRun, last run = $lastRun"
+    runTimesList="runtimes_${firstRun}_to_${lastRun}.txt"
+    url="http://ebutz.web.cern.ch/ebutz/cgi-bin/getTimesForRuns.pl?FIRSTRUN=${firstRun}&LASTRUN=${lastRun}"
+    if [ -e "$runTimesList" ]; then
+        echo "found file with run times: $runTimesList"
+    else
+        echo "wget -O ${runTimesList} ${url}"
+        wget -O ${runTimesList} ${url}
+    fi
     for eachRunlist in "${runlists[@]}"
     do
         if [[ $eachRunlist == *"StreamExpressCosmics"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpressCosmics"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpressCosmics
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpressCosmics"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList StreamExpressCosmics
         elif [[ $eachRunlist ==  *"Cosmics"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist Cosmics"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist Cosmics
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes Cosmics"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes Cosmics
         elif [[ $eachRunlist == *"StreamExpress"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpress"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpress
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpress"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpress
         elif [[ $eachRunlist == *"ZeroBias"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist ZeroBias1"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist ZeroBias1
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes ZeroBias1"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes ZeroBias1
         fi
     done
 
@@ -130,6 +154,7 @@ if [[ $mode == "all" || $mode == "month" ]]; then
     echo "Cleaning old runlists..."
     rm runlist_*.txt
     rm list_missingTrackerMap_*.txt
+    rm runtimes_*.txt
  
     firstday="${year}-${monthOption}-01"
     lastday=$(date -d "$firstday +1month -1day" +'%Y-%m-%d') #the daily report produces the trend for the last week + everything in the current week until yesterday
@@ -153,20 +178,34 @@ if [[ $mode == "all" || $mode == "month" ]]; then
 
     #Daily-2: produce it in the daily report
     sh BadChannelTrendProducer_automaticYes.sh 1.1 #clean the daily reports
+    #run Erik's script to get the list of start and end times of all runs in the lists
+    sort runlist_*.txt > sorted_runlist_all.txt
+    firstRun=$(sed -n '1p' sorted_runlist_all.txt)
+    lastRun=$(sed -e '$!d' sorted_runlist_all.txt)
+    rm sorted_runlist_all.txt
+    echo "first run = $firstRun, last run = $lastRun"
+    runTimesList="runtimes_${firstRun}_to_${lastRun}.txt"
+    url="http://ebutz.web.cern.ch/ebutz/cgi-bin/getTimesForRuns.pl?FIRSTRUN=${firstRun}&LASTRUN=${lastRun}"
+    if [ -e "$runTimesList" ]; then
+        echo "found file with run times: $runTimesList"
+    else
+        echo "wget -O ${runTimesList} ${url}"
+        wget -O ${runTimesList} ${url}
+    fi
     for eachRunlist in "${runlists[@]}"
     do
         if [[ $eachRunlist == *"StreamExpressCosmics"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpressCosmics"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpressCosmics
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpressCosmics 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpressCosmics 0
         elif [[ $eachRunlist ==  *"Cosmics"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist Cosmics"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist Cosmics
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes Cosmics 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes Cosmics 0
         elif [[ $eachRunlist == *"StreamExpress"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpress"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpress
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpress 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpress 0
         elif [[ $eachRunlist == *"ZeroBias"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist ZeroBias1"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist ZeroBias1
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes ZeroBias1 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes ZeroBias1 0
         fi
     done
 
@@ -194,6 +233,7 @@ if [[ $mode == "all" || $mode == "year" ]]; then
     echo "Cleaning old runlists..."
     rm runlist_*.txt
     rm list_missingTrackerMap_*.txt
+    rm runtimes_*.txt
  
     firstday="${yearOption}-01-01"
     #lastday=$(date +'%Y-%m-%d') 
@@ -204,8 +244,6 @@ if [[ $mode == "all" || $mode == "year" ]]; then
     if [[ $detector == "all" || $detector == "Pixel" ]]; then
         python listRuns16_Pixel.py --daymin $firstday --daymax $lastday
     fi
-
-
 
     find -type f -empty -delete #remove empty files
     if ! ls runlist_*.txt 1> /dev/null 2>&1; then
@@ -219,20 +257,34 @@ if [[ $mode == "all" || $mode == "year" ]]; then
 
     #Daily-2: produce it in the daily report
     sh BadChannelTrendProducer_automaticYes.sh 1.1 #clean the daily reports
+    #run Erik's script to get the list of start and end times of all runs in the lists
+    sort runlist_*.txt > sorted_runlist_all.txt
+    firstRun=$(sed -n '1p' sorted_runlist_all.txt)
+    lastRun=$(sed -e '$!d' sorted_runlist_all.txt)
+    rm sorted_runlist_all.txt
+    echo "first run = $firstRun, last run = $lastRun"
+    runTimesList="runtimes_${firstRun}_to_${lastRun}.txt"
+    url="http://ebutz.web.cern.ch/ebutz/cgi-bin/getTimesForRuns.pl?FIRSTRUN=${firstRun}&LASTRUN=${lastRun}"
+    if [ -e "$runTimesList" ]; then
+        echo "found file with run times: $runTimesList"
+    else
+        echo "wget -O ${runTimesList} ${url}"
+        wget -O ${runTimesList} ${url}
+    fi
     for eachRunlist in "${runlists[@]}"
     do
         if [[ $eachRunlist == *"StreamExpressCosmics"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpressCosmics"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpressCosmics
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpressCosmics 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpressCosmics 0
         elif [[ $eachRunlist ==  *"Cosmics"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist Cosmics"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist Cosmics
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes Cosmics 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes Cosmics 0
         elif [[ $eachRunlist == *"StreamExpress"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpress"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist StreamExpress
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpress 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes StreamExpress 0
         elif [[ $eachRunlist == *"ZeroBias"* ]]; then
-            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist ZeroBias1"
-            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist ZeroBias1
+            echo "sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes ZeroBias1 0"
+            sh BadChannelTrendProducer_automaticYes.sh 1.2 $eachRunlist $runTimesList $displayRunTimes ZeroBias1 0
         fi
     done
 

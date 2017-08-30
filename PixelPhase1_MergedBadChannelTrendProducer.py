@@ -78,7 +78,7 @@ def SetHRange(h,dataset,runmin,runmax):
     h.GetYaxis().SetRangeUser(0,hmax*1.2)
 
 #Add vertical lines showing boundaries between runs
-def AddRunBoundaries(h,addlabels=False):
+def AddRunBoundaries(h,nbins,addlabels=False):
     line = TLine()
     line.SetLineStyle(3)
     tl = TLatex()
@@ -89,8 +89,8 @@ def AddRunBoundaries(h,addlabels=False):
     tl2.SetTextSize(0.025)
     tl2.SetTextAlign(31)
     tl2.SetTextAngle(90)
-    axislength = h.GetXaxis().GetBinUpEdge(h.GetNbinsX()) - h.GetXaxis().GetBinLowEdge(1)
-    for ibin in range(1,h.GetNbinsX()+1):
+    axislength = h.GetXaxis().GetBinUpEdge(nbins) - h.GetXaxis().GetBinLowEdge(1)
+    for ibin in range(1,nbins+1):
         if ibin>1:
             line.DrawLine(h.GetXaxis().GetBinLowEdge(ibin),0,h.GetXaxis().GetBinLowEdge(ibin),h.GetMaximum())
         if addlabels:
@@ -309,15 +309,15 @@ for index, k in enumerate(runNumbers):
     trend['Pixel'].GetXaxis().SetBinLabel(bin,str(k))
 
 
+runmin=runNumbers[0]
+runmax=runNumbers[totruns-1]
+
 totruns = totruns - notEnoughClusters
 
 if totruns == 0:
     print "No runs (or TrackerMaps) found"
     sys.exit()
 
-
-runmin=runNumbers[0]
-runmax=runNumbers[totruns-1]
 
 totfract_bpix_time=100.*float(mean_bpix_vs_time)/(n_bpix*tot_time)
 strleg_bpix_time="mean BPIX Dead ROCs = " + str(totfract_bpix_time)[:4] +"%"
@@ -380,7 +380,7 @@ for subdet,hist in trend.iteritems():
     hist.Draw()
     if Rleg_time.has_key(subdet):
 	Rleg_time[subdet].Draw()
-    AddRunBoundaries(hist)
+    AddRunBoundaries(hist,totruns)
     ymax = hist.GetMaximum()
     leg_time_bkg = TGraph(5)
     leg_time_bkg.SetPoint(0,0.15,1.0*ymax)
@@ -429,7 +429,7 @@ if DO_FIXED_BIN_WIDTH_PLOTS:
         hist.Draw()
         if Rleg.has_key(subdet):
     	    Rleg[subdet].Draw()
-        AddRunBoundaries(hist)
+        AddRunBoundaries(hist,totruns)
         c.SaveAs(folder+"/Pixel_MergedBadChannelsTrends/Pixel_MergedBadChannels"+subdet.replace(" ","")+"_vsrun_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
         c.Write()
 

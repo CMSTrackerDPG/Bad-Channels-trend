@@ -205,8 +205,10 @@ for index, k in enumerate(runNumbers):
             file_path = path
             break
     if file_path == '':
-        'Print didn\'t find tracker maps for run number ',str(k),'\!'
-        sys.exit()
+        print 'Didn\'t find tracker maps for run number ',str(k),'!'
+        #sys.exit()
+	bin=bin+1
+	continue
 
     with open(file_path,'r') as file_in:
         contents = file_in.readlines()
@@ -214,6 +216,8 @@ for index, k in enumerate(runNumbers):
     bin=bin+1
 
     totals = [float(line.split()[3]) for line in contents if "TOTAL IN LAYER" in line]
+    if len(totals) != 10:
+           continue
     #this is the order of the entries in the file
     trend['BPixL4'].SetBinContent(bin,totals[0])
     trend['FPixp1'].SetBinContent(bin,totals[1])
@@ -297,6 +301,17 @@ for subdet in trend.keys():
 totalLength = trend['Pixel'].GetXaxis().GetBinUpEdge(totruns) - trend['Pixel'].GetXaxis().GetBinLowEdge(1)
 leg_time = TLatex()
 leg_time.SetTextSize(0.03)
+lsLength = 23.3
+leg_time_scale = 500.*lsLength
+leg_time_str = '500 LS'
+if leg_time_scale > 0.5*totalLength:
+    leg_time_scale = 50.*lsLength
+    leg_time_str = '50 LS'
+elif leg_time_scale < 0.05*totalLength:
+    leg_time_scale = 5000.*lsLength
+    leg_time_str = '5000 LS'
+
+'''
 time_unit = tot_time/20.
 m,s = divmod(time_unit,60)
 h,m = divmod(m,60)
@@ -312,8 +327,7 @@ elif m > 0:
     time_str = '%d m, %3.1f s' % (m,(time_unit - (60.*m)))
 else:
     time_str = '%3.1f seconds' % (time_unit)
-
-
+'''
 
 folder = os.getcwd()
 
@@ -333,19 +347,24 @@ for subdet,hist in trend.iteritems():
     leg_time_bkg = TGraph(5)
     leg_time_bkg.SetPoint(0,0.15,1.0*ymax)
     leg_time_bkg.SetPoint(1,0.15,0.9*ymax)
-    leg_time_bkg.SetPoint(2,0.15+5.5*(totalLength/20.0),0.9*ymax)
-    leg_time_bkg.SetPoint(3,0.15+5.5*(totalLength/20.0),1.0*ymax)
+    #leg_time_bkg.SetPoint(2,0.15+5.5*(totalLength/20.0),0.9*ymax)
+    #leg_time_bkg.SetPoint(3,0.15+5.5*(totalLength/20.0),1.0*ymax)
+    leg_time_bkg.SetPoint(2,0.15+totalLength/10.0+2.5*(leg_time_scale),0.9*ymax)
+    leg_time_bkg.SetPoint(3,0.15+totalLength/10.0+2.5*(leg_time_scale),1.0*ymax)
     leg_time_bkg.SetPoint(4,0.15,1.0*ymax)
     leg_time_bkg.SetFillColor(10)
     leg_time_bkg.SetFillStyle(1001)
     leg_time_gr = TGraph(4)
     leg_time_gr.SetPoint(0,0.15+totalLength/20.0,0.97*ymax)
     leg_time_gr.SetPoint(1,0.15+totalLength/20.0,0.95*ymax)
-    leg_time_gr.SetPoint(2,0.15+2*(totalLength/20.0),0.95*ymax)
-    leg_time_gr.SetPoint(3,0.15+2*(totalLength/20.0),0.97*ymax)
+    #leg_time_gr.SetPoint(2,0.15+2*(totalLength/20.0),0.95*ymax)
+    #leg_time_gr.SetPoint(3,0.15+2*(totalLength/20.0),0.97*ymax)
+    leg_time_gr.SetPoint(2,0.15+totalLength/20.0+leg_time_scale,0.95*ymax)
+    leg_time_gr.SetPoint(3,0.15+totalLength/20.0+leg_time_scale,0.97*ymax)
     leg_time_bkg.Draw('F')
     leg_time_gr.Draw('L')
-    leg_time.DrawLatex(0.15 + 2.25*(totalLength/20.0),0.95*ymax,time_str)
+    #leg_time.DrawLatex(0.15 + 2.25*(totalLength/20.0),0.95*ymax,time_str)
+    leg_time.DrawLatex(0.15 + totalLength/20.0 + 1.25*(leg_time_scale),0.95*ymax,leg_time_str)
     c.RedrawAxis()
     c.SaveAs(folder+"/Pixel_NoisyColumnsTrends/Pixel_NoisyColumns"+subdet+"_"+str(runmin).strip(' \n')+"_"+str(runmax).strip(' \n')+".png")
     c.Write()
